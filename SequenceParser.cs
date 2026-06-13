@@ -29,6 +29,11 @@ public static class SequenceParser
         @"Пластина\s+([IVX]+|\d+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Захватывает число повторений вида "× 3", "x3", "*3", "х 3" (кириллическая х).
+    private static readonly Regex RepeatRegex = new(
+        @"[×xX*хХ]\s*(\d+)",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Парсит весь многострочный текст. Пустые и нераспознанные строки пропускаются.
     /// </summary>
@@ -81,11 +86,26 @@ public static class SequenceParser
             return null;
         }
 
+        int repeatCount = ParseRepeatCount(line);
+
         return new LockStep
         {
             PlateIndex = plateIndex,
-            Direction = direction.Value
+            Direction = direction.Value,
+            RepeatCount = repeatCount
         };
+    }
+
+    private static int ParseRepeatCount(string line)
+    {
+        Match repeatMatch = RepeatRegex.Match(line);
+        if (repeatMatch.Success && int.TryParse(repeatMatch.Groups[1].Value, out int count) && count > 0)
+        {
+            return count;
+        }
+
+        // По умолчанию один поворот.
+        return 1;
     }
 
     private static int ParsePlateNumber(string raw)

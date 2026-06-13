@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "c:\\Users\\dolgovda\\Downloads\\temporary\\LockPicker\\LockPicker.csproj": {}
+    "c:\\Users\\dolgovda\\Downloads\\temporary\\GothicLockPicker\\LockPicker.csproj": {}
   },
   "projects": {
-    "c:\\Users\\dolgovda\\Downloads\\temporary\\LockPicker\\LockPicker.csproj": {
+    "c:\\Users\\dolgovda\\Downloads\\temporary\\GothicLockPicker\\LockPicker.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "c:\\Users\\dolgovda\\Downloads\\temporary\\LockPicker\\LockPicker.csproj",
+        "projectUniqueName": "c:\\Users\\dolgovda\\Downloads\\temporary\\GothicLockPicker\\LockPicker.csproj",
         "projectName": "LockPicker",
-        "projectPath": "c:\\Users\\dolgovda\\Downloads\\temporary\\LockPicker\\LockPicker.csproj",
+        "projectPath": "c:\\Users\\dolgovda\\Downloads\\temporary\\GothicLockPicker\\LockPicker.csproj",
         "packagesPath": "C:\\Users\\dolgovda\\.nuget\\packages\\",
-        "outputPath": "c:\\Users\\dolgovda\\Downloads\\temporary\\LockPicker\\obj\\",
+        "outputPath": "c:\\Users\\dolgovda\\Downloads\\temporary\\GothicLockPicker\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

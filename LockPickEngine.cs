@@ -57,15 +57,24 @@ public sealed class LockPickEngine
             // 1. Навигация к нужной пластине.
             await NavigateToPlateAsync(step.PlateIndex, i + 1, steps.Count, token);
 
-            // 2. Поворот пластины в нужную сторону.
+            // 2. Поворот пластины в нужную сторону нужное число раз.
             ushort turnKey = step.Direction == TurnDirection.Left ? VK_A : VK_D;
             string dirText = step.Direction == TurnDirection.Left ? "Влево ◀ (A)" : "Вправо ▶ (D)";
+            int repeats = Math.Max(1, step.RepeatCount);
 
-            ReportProgress(i + 1, steps.Count,
-                $"Шаг {i + 1}: Пластина {step.PlateIndex} → поворот {dirText}");
+            for (int r = 0; r < repeats; r++)
+            {
+                token.ThrowIfCancellationRequested();
 
-            NativeMethods.TapKey(turnKey);
-            await DelayAsync(token);
+                // Если поворотов несколько — показываем счётчик "(2/3)".
+                string repeatText = repeats > 1 ? $" ({r + 1}/{repeats})" : string.Empty;
+
+                ReportProgress(i + 1, steps.Count,
+                    $"Шаг {i + 1}: Пластина {step.PlateIndex} → поворот {dirText}{repeatText}");
+
+                NativeMethods.TapKey(turnKey);
+                await DelayAsync(token);
+            }
         }
 
         ReportProgress(steps.Count, steps.Count, "Последовательность завершена.");
