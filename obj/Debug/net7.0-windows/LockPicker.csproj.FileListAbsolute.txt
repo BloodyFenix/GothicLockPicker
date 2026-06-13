@@ -1,0 +1,15 @@
+c:\Users\dolgovda\Downloads\temporary\LockPicker\bin\Debug\net7.0-windows\LockPicker.exe
+c:\Users\dolgovda\Downloads\temporary\LockPicker\bin\Debug\net7.0-windows\LockPicker.deps.json
+c:\Users\dolgovda\Downloads\temporary\LockPicker\bin\Debug\net7.0-windows\LockPicker.runtimeconfig.json
+c:\Users\dolgovda\Downloads\temporary\LockPicker\bin\Debug\net7.0-windows\LockPicker.dll
+c:\Users\dolgovda\Downloads\temporary\LockPicker\bin\Debug\net7.0-windows\LockPicker.pdb
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.csproj.AssemblyReference.cache
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.GeneratedMSBuildEditorConfig.editorconfig
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.AssemblyInfoInputs.cache
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.AssemblyInfo.cs
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.csproj.CoreCompileInputs.cache
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.dll
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\refint\LockPicker.dll
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.pdb
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\LockPicker.genruntimeconfig.cache
+c:\Users\dolgovda\Downloads\temporary\LockPicker\obj\Debug\net7.0-windows\ref\LockPicker.dll
