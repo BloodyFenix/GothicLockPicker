@@ -354,13 +354,13 @@ public sealed class MainForm : Form
         // Заголовки столбцов.
         for (int j = 0; j < n; j++)
         {
-            _matrixPanel.Controls.Add(MakeMatrixHeader(ToRoman(j + 1)), j + 1, 0);
+            _matrixPanel.Controls.Add(MakeMatrixHeader((j + 1).ToString()), j + 1, 0);
         }
 
         for (int i = 0; i < n; i++)
         {
             // Заголовок строки.
-            _matrixPanel.Controls.Add(MakeMatrixHeader(ToRoman(i + 1)), 0, i + 1);
+            _matrixPanel.Controls.Add(MakeMatrixHeader((i + 1).ToString()), 0, i + 1);
 
             for (int j = 0; j < n; j++)
             {
@@ -412,7 +412,8 @@ public sealed class MainForm : Form
         _startPanel.Controls.Clear();
         _plates = new PlateRowControl[n];
 
-        // Рисуем пластины сверху вниз: I сверху, как в веб-версии.
+        // Создаём пластины по логическому индексу (0 — первая пластина),
+        // чтобы Solve() корректно читал _plates[i].Position.
         for (int i = 0; i < n; i++)
         {
             var plate = new PlateRowControl
@@ -425,7 +426,13 @@ public sealed class MainForm : Form
             plate.PositionChanged += (_, _) => Solve();
 
             _plates[i] = plate;
-            _startPanel.Controls.Add(plate);
+        }
+
+        // Добавляем в панель в обратном порядке: пластина 1 снизу,
+        // максимальная — сверху (панель имеет FlowDirection.TopDown).
+        for (int i = n - 1; i >= 0; i--)
+        {
+            _startPanel.Controls.Add(_plates[i]);
         }
 
         _startPanel.ResumeLayout();
@@ -458,13 +465,6 @@ public sealed class MainForm : Form
         Font = GothHeadingFont,
         Margin = new Padding(1)
     };
-
-    /// <summary>Преобразует число 1..10 в римскую запись для подписей.</summary>
-    private static string ToRoman(int n)
-    {
-        string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
-        return n >= 1 && n <= romans.Length ? romans[n - 1] : n.ToString();
-    }
 
     private static Label MakeLabel(string text) => new()
     {

@@ -47,9 +47,6 @@ public sealed class PlateRowControl : Control
     private int _dragStartPosition;   // позиция пластины в начале перетаскивания
     private int _dragVisualOffsetPx;  // визуальное смещение пластины во время drag
 
-    private static readonly string[] Romans =
-        { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
-
     /// <summary>Возникает при изменении позиции пластины пользователем.</summary>
     public event EventHandler? PositionChanged;
 
@@ -231,14 +228,12 @@ public sealed class PlateRowControl : Control
 
     private void DrawLabel(Graphics g)
     {
-        string roman = PlateNumber >= 1 && PlateNumber <= Romans.Length
-            ? Romans[PlateNumber - 1]
-            : PlateNumber.ToString();
+        string label = PlateNumber.ToString();
 
         using var font = new Font("Constantia", 11F, FontStyle.Bold);
         Color color = _isActive ? GothGoldBright : GothTextDim;
         var rect = new Rectangle(0, 0, LabelWidth, Height);
-        TextRenderer.DrawText(g, roman, font, rect, color,
+        TextRenderer.DrawText(g, label, font, rect, color,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
