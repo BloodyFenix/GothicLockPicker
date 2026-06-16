@@ -106,6 +106,9 @@ public sealed class MainForm : Form
         MinimumSize = new Size(1040, 700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = GothBodyFont;
+        // Перехватываем клавиатуру на уровне формы для горячих клавиш конструктора.
+        KeyPreview = true;
+        KeyDown += OnConstructorKeyDown;
         BackColor = GothBackground;
         ForeColor = GothText;
         LoadWindowIcon();
@@ -340,7 +343,7 @@ public sealed class MainForm : Form
         panel.Controls.Add(MakeLabel(
             "Пластины: позиция — стрелками ◀ ▶; кнопки ·/+/− над номером —"));
         panel.Controls.Add(MakeLabel(
-            "связь выбранной (золотой) пластины с остальными:"));
+            "Клавиши: W/S — выбор пластины, A/D — сдвиг, 1–7 — связь (·/+/−)."));
         _startPanel.FlowDirection = FlowDirection.TopDown;
         _startPanel.AutoSize = true;
         _startPanel.WrapContents = false;
@@ -466,6 +469,127 @@ public sealed class MainForm : Form
     /// Делает выбранную пластину активной (золотая подсветка), снимая выделение с остальных,
     /// и переносит кнопки связи на её строку матрицы.
     /// </summary>
+    /// <summary>
+    /// Горячие клавиши конструктора замка:
+    /// W/S — выбрать предыдущую/следующую пластину;
+    /// A/D — сдвинуть выбранную пластину влево/вправо;
+    /// 1..7 — переключить связь соответствующей пластины с выбранной (нет → + → −).
+    /// </summary>
+    private void OnConstructorKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Не перехватываем клавиши, когда пользователь печатает в полях ввода.
+        if (ActiveControl is TextBoxBase or NumericUpDown)
+        {
+            return;
+        }
+
+        // Конструктор ещё не готов или идёт прогон автомата — игнорируем.
+        if (_rebuilding || _isRunning || _plates.Length == 0)
+        {
+            return;
+        }
+
+        int n = _plates.Length;
+
+        switch (e.KeyCode)
+        {
+            // W/↑ — к пластине с большим номером (визуально вверх).
+            case Keys.W:
+            case Keys.Up:
+                SelectPlate(Math.Min(_selectedPlate + 1, n - 1));
+                break;
+
+            // S/↓ — к пластине с меньшим номером (визуально вниз).
+            case Keys.S:
+            case Keys.Down:
+                SelectPlate(Math.Max(_selectedPlate - 1, 0));
+                break;
+
+            // A/← — сдвиг выбранной пластины влево.
+            case Keys.A:
+            case Keys.Left:
+                ShiftSelectedPlate(-1);
+                break;
+
+            // D/→ — сдвиг выбранной пластины вправо.
+            case Keys.D:
+            case Keys.Right:
+                ShiftSelectedPlate(+1);
+                break;
+
+            default:
+                int target = KeyToPlateIndex(e.KeyCode);
+                if (target < 0 || target >= n)
+                {
+                    return; // не наша клавиша — не подавляем её
+                }
+
+                ToggleRelation(target);
+                break;
+        }
+
+        // Подавляем дальнейшую обработку (звук «динь», навигацию фокуса и т. п.).
+        e.Handled = true;
+        e.SuppressKeyPress = true;
+    }
+
+    /// <summary>Преобразует клавишу цифры (1..7, основная или NumPad) в индекс пластины 0-based.</summary>
+    private static int KeyToPlateIndex(Keys key) => key switch
+    {
+        >= Keys.D1 and <= Keys.D7 => key - Keys.D1,
+        >= Keys.NumPad1 and <= Keys.NumPad7 => key - Keys.NumPad1,
+        _ => -1
+    };
+
+    /// <summary>Делает выбранной пластину с индексом index, обновляя подсветку и кнопки связи.</summary>
+    private void SelectPlate(int index)
+    {
+        if (index == _selectedPlate)
+        {
+            return;
+        }
+
+        _selectedPlate = index;
+        for (int i = 0; i < _plates.Length; i++)
+        {
+            _plates[i].IsActive = i == index;
+        }
+
+        RefreshRelationButtons();
+    }
+
+    /// <summary>Сдвигает выбранную пластину на delta позиций (срабатывает PositionChanged → Solve()).</summary>
+    private void ShiftSelectedPlate(int delta)
+    {
+        PlateRowControl plate = _plates[_selectedPlate];
+        plate.Position = Math.Clamp(plate.Position + delta, BreachSolver.MinPos, BreachSolver.MaxPos);
+    }
+
+    /// <summary>
+    /// Циклически переключает связь пластины target с выбранной: нет (0) → + (1) → − (−1) → нет.
+    /// Связь пластины самой с собой (диагональ) не редактируется.
+    /// </summary>
+    private void ToggleRelation(int target)
+    {
+        if (target == _selectedPlate)
+        {
+            return; // диагональ заблокирована
+        }
+
+        int current = _matrix[_selectedPlate, target];
+        int next = current switch
+        {
+            0 => 1,
+            1 => -1,
+            _ => 0
+        };
+
+        _matrix[_selectedPlate, target] = next;
+        _plates[target].RelationValue = next;
+        RefreshOutgoingRelations();
+        Solve();
+    }
+
     private void OnPlateSelected(object? sender, EventArgs e)
     {
         for (int i = 0; i < _plates.Length; i++)
