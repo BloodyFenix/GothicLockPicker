@@ -36,6 +36,9 @@ public sealed class MainForm : Form
     /// <summary>Болотно-зелёный для действия «Старт».</summary>
     private static readonly Color GothGreen = Color.FromArgb(58, 92, 56);
 
+    /// <summary>Тёмный фон-подложка под пластинами замка.</summary>
+    private static readonly Color TrackBackdrop = Color.FromArgb(14, 12, 16);
+
     // ===== Готические шрифты =====
 
     private static readonly Font GothTitleFont = new("Constantia", 22F, FontStyle.Bold);
@@ -57,6 +60,16 @@ public sealed class MainForm : Form
     private readonly ListBox _logBox = new();
     private readonly ProgressBar _progressBar = new();
 
+    // ===== Элементы конструктора замка (правая панель) =====
+    private readonly NumericUpDown _constPlateCountBox = new();
+    private readonly TableLayoutPanel _matrixPanel = new();
+    private readonly FlowLayoutPanel _startPanel = new();
+    private readonly Label _solveStatusLabel = new();
+
+    // Текущие комбобоксы матрицы связей и визуальные пластины стартовых позиций.
+    private ComboBox[,] _matrixCombos = new ComboBox[0, 0];
+    private PlateRowControl[] _plates = Array.Empty<PlateRowControl>();
+
     private IntPtr _gameWindow = IntPtr.Zero;
     private CancellationTokenSource? _cts;
     private bool _isRunning;
@@ -74,7 +87,7 @@ public sealed class MainForm : Form
     private void BuildUi()
     {
         Text = "Gothic LockPicker — взлом замков";
-        MinimumSize = new Size(560, 700);
+        MinimumSize = new Size(1040, 700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = GothBodyFont;
         BackColor = GothBackground;
@@ -85,11 +98,13 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
-            ColumnCount = 1,
+            ColumnCount = 2,
             RowCount = 1,
             AutoScroll = true,
             BackColor = GothBackground
         };
+        // Левая колонка — управление автоматом, правая — конструктор замка.
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 540));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         var layout = new FlowLayoutPanel
@@ -225,10 +240,230 @@ public sealed class MainForm : Form
         _logBox.BorderStyle = BorderStyle.FixedSingle;
         layout.Controls.Add(_logBox);
 
-        root.Controls.Add(layout);
+        root.Controls.Add(layout, 0, 0);
+        root.Controls.Add(BuildConstructorPanel(), 1, 0);
         Controls.Add(root);
 
         FormClosing += OnFormClosing;
+    }
+
+    /// <summary>
+    /// Строит правую панель «Конструктор замка»: выбор числа пластин,
+    /// матрицу связей, стартовые позиции и кнопку поиска решения.
+    /// </summary>
+    private Control BuildConstructorPanel()
+    {
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            BackColor = GothBackground,
+            Margin = new Padding(16, 0, 0, 0)
+        };
+
+        // --- Заголовок ---
+        var title = new Label
+        {
+            Text = "⚙ Конструктор замка ⚙",
+            Font = GothTitleFont,
+            ForeColor = GothGold,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 2)
+        };
+        var subtitle = new Label
+        {
+            Text = "— схема связей и поиск решения —",
+            Font = GothHeadingFont,
+            ForeColor = GothBlood,
+            AutoSize = true,
+            Margin = new Padding(2, 0, 0, 12)
+        };
+        panel.Controls.Add(title);
+        panel.Controls.Add(subtitle);
+
+        // --- Число пластин ---
+        panel.Controls.Add(MakeLabel("Количество пластин:"));
+        _constPlateCountBox.Minimum = 2;
+        _constPlateCountBox.Maximum = 10;
+        _constPlateCountBox.Value = 5;
+        _constPlateCountBox.Width = 120;
+        StyleNumeric(_constPlateCountBox);
+        _constPlateCountBox.ValueChanged += (_, _) => RebuildMatrix();
+        panel.Controls.Add(_constPlateCountBox);
+
+        // --- Матрица связей ---
+        panel.Controls.Add(MakeLabel(
+            "Связи: строка «тянет» столбец (+ синхронно, − инверсно, 0 нет):"));
+        _matrixPanel.AutoSize = true;
+        _matrixPanel.BackColor = GothPanel;
+        _matrixPanel.Padding = new Padding(6);
+        _matrixPanel.Margin = new Padding(0, 2, 0, 8);
+        panel.Controls.Add(_matrixPanel);
+
+        // --- Стартовые позиции (визуальные пластины, как в веб-версии) ---
+        panel.Controls.Add(MakeLabel(
+            "Стартовые позиции пластин (стрелками ◀ ▶, центр — цель):"));
+        _startPanel.FlowDirection = FlowDirection.TopDown;
+        _startPanel.AutoSize = true;
+        _startPanel.WrapContents = false;
+        _startPanel.BackColor = TrackBackdrop;
+        _startPanel.Padding = new Padding(8);
+        _startPanel.Margin = new Padding(0, 2, 0, 8);
+        panel.Controls.Add(_startPanel);
+
+        // --- Статус поиска решения ---
+        // Решение ищется автоматически при любом изменении и сразу
+        // отправляется в поле последовательности взлома (левая панель).
+        _solveStatusLabel.Text = "";
+        _solveStatusLabel.ForeColor = GothGold;
+        _solveStatusLabel.Font = GothHeadingFont;
+        _solveStatusLabel.AutoSize = true;
+        _solveStatusLabel.Margin = new Padding(0, 4, 0, 8);
+        panel.Controls.Add(_solveStatusLabel);
+
+        RebuildMatrix();
+        return panel;
+    }
+
+    /// <summary>
+    /// Пересоздаёт сетку матрицы связей и поля стартовых позиций
+    /// под текущее количество пластин.
+    /// </summary>
+    private void RebuildMatrix()
+    {
+        int n = (int)_constPlateCountBox.Value;
+
+        // Подавляем пересчёт, пока матрица и пластины пересоздаются.
+        _rebuilding = true;
+
+        // --- Матрица ---
+        _matrixPanel.SuspendLayout();
+        _matrixPanel.Controls.Clear();
+        _matrixPanel.ColumnStyles.Clear();
+        _matrixPanel.RowStyles.Clear();
+        _matrixPanel.ColumnCount = n + 1;
+        _matrixPanel.RowCount = n + 1;
+
+        _matrixCombos = new ComboBox[n, n];
+
+        // Угловая ячейка.
+        _matrixPanel.Controls.Add(MakeMatrixHeader("№"), 0, 0);
+
+        // Заголовки столбцов.
+        for (int j = 0; j < n; j++)
+        {
+            _matrixPanel.Controls.Add(MakeMatrixHeader(ToRoman(j + 1)), j + 1, 0);
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            // Заголовок строки.
+            _matrixPanel.Controls.Add(MakeMatrixHeader(ToRoman(i + 1)), 0, i + 1);
+
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j)
+                {
+                    // Диагональ зафиксирована: пластина всегда двигает сама себя (+).
+                    var fixedLabel = new Label
+                    {
+                        Text = "+",
+                        AutoSize = false,
+                        Width = 42,
+                        Height = 24,
+                        TextAlign = ContentAlignment.MiddleCenter,
+                        ForeColor = GothGold,
+                        BackColor = GothPanelLight,
+                        Margin = new Padding(1)
+                    };
+                    _matrixPanel.Controls.Add(fixedLabel, j + 1, i + 1);
+                    continue;
+                }
+
+                var combo = new ComboBox
+                {
+                    DropDownStyle = ComboBoxStyle.DropDownList,
+                    Width = 42,
+                    Margin = new Padding(1),
+                    BackColor = GothPanel,
+                    ForeColor = GothText,
+                    FlatStyle = FlatStyle.Flat
+                };
+                combo.Items.AddRange(new object[] { "0", "+", "−" });
+                combo.SelectedIndex = 0;
+                combo.SelectedIndexChanged += (_, _) => Solve();
+                _matrixCombos[i, j] = combo;
+                _matrixPanel.Controls.Add(combo, j + 1, i + 1);
+            }
+        }
+
+        _matrixPanel.ResumeLayout();
+
+        // --- Стартовые позиции (визуальные пластины замка) ---
+        _startPanel.SuspendLayout();
+
+        // Освобождаем ресурсы старых пластин перед пересозданием.
+        foreach (PlateRowControl old in _plates)
+        {
+            old.Dispose();
+        }
+        _startPanel.Controls.Clear();
+        _plates = new PlateRowControl[n];
+
+        // Рисуем пластины сверху вниз: I сверху, как в веб-версии.
+        for (int i = 0; i < n; i++)
+        {
+            var plate = new PlateRowControl
+            {
+                PlateNumber = i + 1,
+                Position = BreachSolver.Center,
+                IsActive = i == 0
+            };
+            plate.PlateSelected += OnPlateSelected;
+            plate.PositionChanged += (_, _) => Solve();
+
+            _plates[i] = plate;
+            _startPanel.Controls.Add(plate);
+        }
+
+        _startPanel.ResumeLayout();
+
+        // Перестроение завершено — теперь пересчитываем решение.
+        _rebuilding = false;
+        Solve();
+    }
+
+    /// <summary>
+    /// Делает выбранную пластину активной (золотая подсветка), снимая выделение с остальных.
+    /// </summary>
+    private void OnPlateSelected(object? sender, EventArgs e)
+    {
+        foreach (PlateRowControl plate in _plates)
+        {
+            plate.IsActive = ReferenceEquals(plate, sender);
+        }
+    }
+
+    /// <summary>Создаёт стилизованную ячейку-заголовок матрицы.</summary>
+    private static Label MakeMatrixHeader(string text) => new()
+    {
+        Text = text,
+        AutoSize = false,
+        Width = 42,
+        Height = 24,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = GothGold,
+        Font = GothHeadingFont,
+        Margin = new Padding(1)
+    };
+
+    /// <summary>Преобразует число 1..10 в римскую запись для подписей.</summary>
+    private static string ToRoman(int n)
+    {
+        string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
+        return n >= 1 && n <= romans.Length ? romans[n - 1] : n.ToString();
     }
 
     private static Label MakeLabel(string text) => new()
@@ -373,6 +608,96 @@ public sealed class MainForm : Form
         "Шаг 3: Пластина III ➔ Влево ◀";
 
     // ===== Обработчики =====
+
+    // Подавляет автоматический пересчёт во время перестроения интерфейса конструктора.
+    private bool _rebuilding;
+
+    /// <summary>
+    /// Собирает матрицу связей и стартовые позиции из конструктора, запускает
+    /// BFS-решатель и сразу отправляет найденную последовательность шагов
+    /// в поле последовательности взлома. Вызывается при любом изменении конструктора.
+    /// </summary>
+    private void Solve()
+    {
+        // Во время перестроения UI поля ещё не согласованы — пропускаем.
+        if (_rebuilding || _isRunning)
+        {
+            return;
+        }
+
+        int n = (int)_constPlateCountBox.Value;
+        if (_plates.Length != n)
+        {
+            return; // пластины ещё не пересозданы
+        }
+
+        // Собираем матрицу связей из комбобоксов.
+        var matrix = new int[n, n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j)
+                {
+                    matrix[i, j] = 1; // диагональ всегда +1
+                    continue;
+                }
+
+                matrix[i, j] = _matrixCombos[i, j].SelectedItem switch
+                {
+                    "+" => 1,
+                    "−" => -1,
+                    _ => 0
+                };
+            }
+        }
+
+        // Собираем стартовые позиции из визуальных пластин.
+        var start = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            start[i] = _plates[i].Position;
+        }
+
+        var solver = new BreachSolver(n, matrix);
+        List<LockStep> steps = solver.GetSolutionSteps(start);
+
+        if (steps.Count == 0)
+        {
+            // Различаем «уже открыт» и «неразрешим».
+            bool alreadySolved = Array.TrueForAll(start, p => p == BreachSolver.Center);
+            if (alreadySolved)
+            {
+                _solveStatusLabel.Text = "✔ Замок уже открыт (все по центру)";
+                _solveStatusLabel.ForeColor = GothGold;
+                _sequenceBox.Text = string.Empty;
+            }
+            else
+            {
+                _solveStatusLabel.Text = "✖ Решение не найдено (замок неразрешим)";
+                _solveStatusLabel.ForeColor = GothBlood;
+            }
+
+            return;
+        }
+
+        // Формируем читаемую последовательность шагов.
+        var lines = new List<string>();
+        int totalMoves = 0;
+        for (int idx = 0; idx < steps.Count; idx++)
+        {
+            LockStep s = steps[idx];
+            totalMoves += s.RepeatCount;
+            lines.Add($"Шаг {idx + 1}: {s}");
+        }
+
+        // Сразу отправляем решение в последовательность взлома (левая панель).
+        _sequenceBox.Text = string.Join(Environment.NewLine, lines);
+        _startPlateBox.Value = 1; // решение всегда начинается с фокуса на первой пластине
+
+        _solveStatusLabel.Text = $"✔ Найдено шагов: {steps.Count} (ходов: {totalMoves})";
+        _solveStatusLabel.ForeColor = GothGold;
+    }
 
     private void OnFindWindowClick(object? sender, EventArgs e)
     {
