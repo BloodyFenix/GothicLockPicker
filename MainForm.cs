@@ -38,7 +38,7 @@ public sealed class MainForm : Form
 
     private void BuildUi()
     {
-        Text = "LockPicker — взлом замков";
+        Text = "Gothic LockPicker — взлом замков";
         MinimumSize = new Size(560, 640);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9F);
