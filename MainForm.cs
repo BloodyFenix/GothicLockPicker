@@ -4,10 +4,45 @@ namespace LockPicker;
 
 /// <summary>
 /// Главное окно приложения. UI строится программно (без дизайнера).
+/// Оформлено в мрачном готическом стиле.
 /// </summary>
 public sealed class MainForm : Form
 {
     private readonly AppSettings _settings;
+
+    // ===== Готическая палитра =====
+
+    /// <summary>Глубокий, почти чёрный фон — холодный камень склепа.</summary>
+    private static readonly Color GothBackground = Color.FromArgb(20, 18, 22);
+
+    /// <summary>Фон панелей и полей ввода — тёмный обсидиан.</summary>
+    private static readonly Color GothPanel = Color.FromArgb(30, 27, 33);
+
+    /// <summary>Чуть более светлый оттенок для элементов в фокусе.</summary>
+    private static readonly Color GothPanelLight = Color.FromArgb(42, 38, 46);
+
+    /// <summary>Основной текст — выцветший пергамент / старое золото.</summary>
+    private static readonly Color GothText = Color.FromArgb(200, 184, 150);
+
+    /// <summary>Приглушённый текст подсказок.</summary>
+    private static readonly Color GothTextDim = Color.FromArgb(140, 128, 108);
+
+    /// <summary>Кроваво-красный акцент.</summary>
+    private static readonly Color GothBlood = Color.FromArgb(120, 22, 22);
+
+    /// <summary>Тусклое золото для рамок и заголовков.</summary>
+    private static readonly Color GothGold = Color.FromArgb(168, 138, 78);
+
+    /// <summary>Болотно-зелёный для действия «Старт».</summary>
+    private static readonly Color GothGreen = Color.FromArgb(58, 92, 56);
+
+    // ===== Готические шрифты =====
+
+    private static readonly Font GothTitleFont = new("Constantia", 22F, FontStyle.Bold);
+    private static readonly Font GothHeadingFont = new("Constantia", 9.75F, FontStyle.Italic);
+    private static readonly Font GothBodyFont = new("Cambria", 10F);
+    private static readonly Font GothButtonFont = new("Constantia", 10F, FontStyle.Bold);
+    private static readonly Font GothMonoFont = new("Consolas", 9.5F);
 
     // Элементы управления.
     private readonly TextBox _windowTitleBox = new();
@@ -39,17 +74,20 @@ public sealed class MainForm : Form
     private void BuildUi()
     {
         Text = "Gothic LockPicker — взлом замков";
-        MinimumSize = new Size(560, 640);
+        MinimumSize = new Size(560, 700);
         StartPosition = FormStartPosition.CenterScreen;
-        Font = new Font("Segoe UI", 9F);
+        Font = GothBodyFont;
+        BackColor = GothBackground;
+        ForeColor = GothText;
 
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(12),
+            Padding = new Padding(16),
             ColumnCount = 1,
             RowCount = 1,
-            AutoScroll = true
+            AutoScroll = true,
+            BackColor = GothBackground
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
@@ -58,25 +96,50 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            AutoScroll = true
+            AutoScroll = true,
+            BackColor = GothBackground
         };
+
+        // --- Декоративный заголовок ---
+        var titleLabel = new Label
+        {
+            Text = "⚜ Gothic LockPicker ⚜",
+            Font = GothTitleFont,
+            ForeColor = GothGold,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 2)
+        };
+        var subtitleLabel = new Label
+        {
+            Text = "— автоматический взломщик замков —",
+            Font = GothHeadingFont,
+            ForeColor = GothBlood,
+            AutoSize = true,
+            Margin = new Padding(2, 0, 0, 12)
+        };
+        layout.Controls.Add(titleLabel);
+        layout.Controls.Add(subtitleLabel);
 
         // --- Заголовок окна игры ---
         layout.Controls.Add(MakeLabel("Заголовок окна игры (поиск по части названия):"));
         _windowTitleBox.Width = 500;
+        StyleTextBox(_windowTitleBox);
         layout.Controls.Add(_windowTitleBox);
 
         var findRow = new FlowLayoutPanel
         {
             FlowDirection = FlowDirection.LeftToRight,
             AutoSize = true,
-            Margin = new Padding(0, 4, 0, 8)
+            Margin = new Padding(0, 4, 0, 8),
+            BackColor = GothBackground
         };
         _findWindowButton.Text = "Найти окно";
         _findWindowButton.AutoSize = true;
+        StyleButton(_findWindowButton, GothPanelLight, GothGold);
         _findWindowButton.Click += OnFindWindowClick;
         _windowStatusLabel.Text = "Окно не найдено";
-        _windowStatusLabel.ForeColor = Color.DarkRed;
+        _windowStatusLabel.ForeColor = GothBlood;
+        _windowStatusLabel.Font = GothHeadingFont;
         _windowStatusLabel.AutoSize = true;
         _windowStatusLabel.Margin = new Padding(12, 8, 0, 0);
         findRow.Controls.Add(_findWindowButton);
@@ -89,6 +152,7 @@ public sealed class MainForm : Form
         _delayBox.Maximum = 60000;
         _delayBox.Increment = 50;
         _delayBox.Width = 120;
+        StyleNumeric(_delayBox);
         layout.Controls.Add(_delayBox);
 
         // --- Стартовая пластина ---
@@ -97,6 +161,7 @@ public sealed class MainForm : Form
         _startPlateBox.Maximum = 20;
         _startPlateBox.Value = 1;
         _startPlateBox.Width = 120;
+        StyleNumeric(_startPlateBox);
         layout.Controls.Add(_startPlateBox);
 
         // --- Обратный отсчёт ---
@@ -105,6 +170,7 @@ public sealed class MainForm : Form
         _countdownBox.Maximum = 30;
         _countdownBox.Value = 3;
         _countdownBox.Width = 120;
+        StyleNumeric(_countdownBox);
         layout.Controls.Add(_countdownBox);
 
         // --- Последовательность ---
@@ -113,7 +179,8 @@ public sealed class MainForm : Form
         _sequenceBox.ScrollBars = ScrollBars.Vertical;
         _sequenceBox.Width = 500;
         _sequenceBox.Height = 160;
-        _sequenceBox.Font = new Font("Consolas", 9F);
+        StyleTextBox(_sequenceBox);
+        _sequenceBox.Font = GothMonoFont;
         layout.Controls.Add(_sequenceBox);
 
         // --- Кнопки старт/стоп ---
@@ -121,18 +188,17 @@ public sealed class MainForm : Form
         {
             FlowDirection = FlowDirection.LeftToRight,
             AutoSize = true,
-            Margin = new Padding(0, 8, 0, 8)
+            Margin = new Padding(0, 8, 0, 8),
+            BackColor = GothBackground
         };
         _startButton.Text = "▶ Старт";
         _startButton.AutoSize = true;
-        _startButton.BackColor = Color.FromArgb(76, 175, 80);
-        _startButton.ForeColor = Color.White;
+        StyleButton(_startButton, GothGreen, GothText);
         _startButton.Click += OnStartClick;
 
         _stopButton.Text = "■ Стоп";
         _stopButton.AutoSize = true;
-        _stopButton.BackColor = Color.FromArgb(211, 47, 47);
-        _stopButton.ForeColor = Color.White;
+        StyleButton(_stopButton, GothBlood, GothText);
         _stopButton.Enabled = false;
         _stopButton.Margin = new Padding(12, 3, 0, 3);
         _stopButton.Click += OnStopClick;
@@ -144,13 +210,18 @@ public sealed class MainForm : Form
         // --- Прогресс ---
         _progressBar.Width = 500;
         _progressBar.Height = 18;
+        _progressBar.ForeColor = GothBlood;
+        _progressBar.BackColor = GothPanel;
         layout.Controls.Add(_progressBar);
 
         // --- Лог ---
         layout.Controls.Add(MakeLabel("Журнал:"));
         _logBox.Width = 500;
         _logBox.Height = 140;
-        _logBox.Font = new Font("Consolas", 8.5F);
+        _logBox.Font = GothMonoFont;
+        _logBox.BackColor = GothPanel;
+        _logBox.ForeColor = GothText;
+        _logBox.BorderStyle = BorderStyle.FixedSingle;
         layout.Controls.Add(_logBox);
 
         root.Controls.Add(layout);
@@ -163,8 +234,40 @@ public sealed class MainForm : Form
     {
         Text = text,
         AutoSize = true,
-        Margin = new Padding(0, 8, 0, 2)
+        Margin = new Padding(0, 8, 0, 2),
+        Font = GothHeadingFont,
+        ForeColor = GothTextDim
     };
+
+    /// <summary>Применяет тёмное готическое оформление к текстовому полю.</summary>
+    private static void StyleTextBox(TextBox box)
+    {
+        box.BackColor = GothPanel;
+        box.ForeColor = GothText;
+        box.BorderStyle = BorderStyle.FixedSingle;
+    }
+
+    /// <summary>Применяет тёмное готическое оформление к числовому полю.</summary>
+    private static void StyleNumeric(NumericUpDown box)
+    {
+        box.BackColor = GothPanel;
+        box.ForeColor = GothText;
+        box.BorderStyle = BorderStyle.FixedSingle;
+    }
+
+    /// <summary>Делает кнопку плоской, с золотой рамкой и заданными цветами.</summary>
+    private static void StyleButton(Button button, Color back, Color fore)
+    {
+        button.FlatStyle = FlatStyle.Flat;
+        button.BackColor = back;
+        button.ForeColor = fore;
+        button.Font = GothButtonFont;
+        button.Padding = new Padding(8, 4, 8, 4);
+        button.FlatAppearance.BorderColor = GothGold;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.MouseOverBackColor = GothPanelLight;
+        button.FlatAppearance.MouseDownBackColor = GothBackground;
+    }
 
     // ===== Применение / сохранение настроек =====
 
@@ -267,13 +370,13 @@ public sealed class MainForm : Form
         if (_gameWindow == IntPtr.Zero)
         {
             _windowStatusLabel.Text = "Окно не найдено";
-            _windowStatusLabel.ForeColor = Color.DarkRed;
+            _windowStatusLabel.ForeColor = GothBlood;
             Log($"Окно с заголовком, содержащим \"{title}\", не найдено.");
             return;
         }
 
         _windowStatusLabel.Text = $"Окно найдено (handle: {_gameWindow})";
-        _windowStatusLabel.ForeColor = Color.DarkGreen;
+        _windowStatusLabel.ForeColor = GothGold;
         Log($"Окно игры найдено: {_gameWindow}");
     }
 

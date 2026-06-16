@@ -1,0 +1,10 @@
+{
+  "DelayMs": 1000,
+  "WindowTitle": "Gothic 1 Remake",
+  "LastSequence": "\u0428\u0430\u0433 1: \u041F\u043B\u0430\u0441\u0442\u0438\u043D\u0430 I \u2794 \u0412\u043F\u0440\u0430\u0432\u043E \u25B6\r\n\u0428\u0430\u0433 2: \u041F\u043B\u0430\u0441\u0442\u0438\u043D\u0430 II \u2794 \u0412\u043F\u0440\u0430\u0432\u043E \u25B6\r\n\u0428\u0430\u0433 3: \u041F\u043B\u0430\u0441\u0442\u0438\u043D\u0430 III \u2794 \u0412\u043B\u0435\u0432\u043E \u25C0",
+  "WindowX": 639,
+  "WindowY": 49,
+  "WindowWidth": 561,
+  "WindowHeight": 861,
+  "WindowMaximized": false
+}
