@@ -62,12 +62,16 @@ public sealed class MainForm : Form
 
     // ===== Элементы конструктора замка (правая панель) =====
     private readonly NumericUpDown _constPlateCountBox = new();
-    private readonly TableLayoutPanel _matrixPanel = new();
     private readonly FlowLayoutPanel _startPanel = new();
     private readonly Label _solveStatusLabel = new();
 
-    // Текущие комбобоксы матрицы связей и визуальные пластины стартовых позиций.
-    private ComboBox[,] _matrixCombos = new ComboBox[0, 0];
+    // Матрица связей (в памяти) и визуальные пластины стартовых позиций.
+    // _matrix[i, j]: пластина i «тянет» пластину j (+1 синхронно, −1 инверсно, 0 нет).
+    private int[,] _matrix = new int[0, 0];
+
+    // Индекс выбранной (золотой) пластины — её строку матрицы редактируют кнопки связи.
+    private int _selectedPlate;
+
     private PlateRowControl[] _plates = Array.Empty<PlateRowControl>();
 
     private IntPtr _gameWindow = IntPtr.Zero;
@@ -293,18 +297,13 @@ public sealed class MainForm : Form
         _constPlateCountBox.ValueChanged += (_, _) => RebuildMatrix();
         panel.Controls.Add(_constPlateCountBox);
 
-        // --- Матрица связей ---
-        panel.Controls.Add(MakeLabel(
-            "Связи: строка «тянет» столбец (+ синхронно, − инверсно, 0 нет):"));
-        _matrixPanel.AutoSize = true;
-        _matrixPanel.BackColor = GothPanel;
-        _matrixPanel.Padding = new Padding(6);
-        _matrixPanel.Margin = new Padding(0, 2, 0, 8);
-        panel.Controls.Add(_matrixPanel);
-
         // --- Стартовые позиции (визуальные пластины, как в веб-версии) ---
+        // Разметка связей теперь прямо на пластинах: над номером — кнопки ·/+/−,
+        // которые задают, как ВЫБРАННАЯ (золотая) пластина влияет на каждую.
         panel.Controls.Add(MakeLabel(
-            "Стартовые позиции пластин (стрелками ◀ ▶, центр — цель):"));
+            "Пластины: позиция — стрелками ◀ ▶; кнопки ·/+/− над номером —"));
+        panel.Controls.Add(MakeLabel(
+            "связь выбранной (золотой) пластины с остальными:"));
         _startPanel.FlowDirection = FlowDirection.TopDown;
         _startPanel.AutoSize = true;
         _startPanel.WrapContents = false;
@@ -338,68 +337,14 @@ public sealed class MainForm : Form
         // Подавляем пересчёт, пока матрица и пластины пересоздаются.
         _rebuilding = true;
 
-        // --- Матрица ---
-        _matrixPanel.SuspendLayout();
-        _matrixPanel.Controls.Clear();
-        _matrixPanel.ColumnStyles.Clear();
-        _matrixPanel.RowStyles.Clear();
-        _matrixPanel.ColumnCount = n + 1;
-        _matrixPanel.RowCount = n + 1;
-
-        _matrixCombos = new ComboBox[n, n];
-
-        // Угловая ячейка.
-        _matrixPanel.Controls.Add(MakeMatrixHeader("№"), 0, 0);
-
-        // Заголовки столбцов.
-        for (int j = 0; j < n; j++)
-        {
-            _matrixPanel.Controls.Add(MakeMatrixHeader((j + 1).ToString()), j + 1, 0);
-        }
-
+        // --- Матрица связей (в памяти) ---
+        // Диагональ всегда +1 (пластина двигает сама себя), остальное — 0.
+        _matrix = new int[n, n];
         for (int i = 0; i < n; i++)
         {
-            // Заголовок строки.
-            _matrixPanel.Controls.Add(MakeMatrixHeader((i + 1).ToString()), 0, i + 1);
-
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    // Диагональ зафиксирована: пластина всегда двигает сама себя (+).
-                    var fixedLabel = new Label
-                    {
-                        Text = "+",
-                        AutoSize = false,
-                        Width = 42,
-                        Height = 24,
-                        TextAlign = ContentAlignment.MiddleCenter,
-                        ForeColor = GothGold,
-                        BackColor = GothPanelLight,
-                        Margin = new Padding(1)
-                    };
-                    _matrixPanel.Controls.Add(fixedLabel, j + 1, i + 1);
-                    continue;
-                }
-
-                var combo = new ComboBox
-                {
-                    DropDownStyle = ComboBoxStyle.DropDownList,
-                    Width = 42,
-                    Margin = new Padding(1),
-                    BackColor = GothPanel,
-                    ForeColor = GothText,
-                    FlatStyle = FlatStyle.Flat
-                };
-                combo.Items.AddRange(new object[] { "0", "+", "−" });
-                combo.SelectedIndex = 0;
-                combo.SelectedIndexChanged += (_, _) => Solve();
-                _matrixCombos[i, j] = combo;
-                _matrixPanel.Controls.Add(combo, j + 1, i + 1);
-            }
+            _matrix[i, i] = 1;
         }
-
-        _matrixPanel.ResumeLayout();
+        _selectedPlate = 0;
 
         // --- Стартовые позиции (визуальные пластины замка) ---
         _startPanel.SuspendLayout();
@@ -424,6 +369,7 @@ public sealed class MainForm : Form
             };
             plate.PlateSelected += OnPlateSelected;
             plate.PositionChanged += (_, _) => Solve();
+            plate.RelationChanged += OnRelationChanged;
 
             _plates[i] = plate;
         }
@@ -437,34 +383,101 @@ public sealed class MainForm : Form
 
         _startPanel.ResumeLayout();
 
+        // Отображаем строку матрицы выбранной пластины на кнопках связи
+        // и индикаторы исходящих связей над каждой пластиной.
+        RefreshRelationButtons();
+        RefreshOutgoingRelations();
+
         // Перестроение завершено — теперь пересчитываем решение.
         _rebuilding = false;
         Solve();
     }
 
     /// <summary>
-    /// Делает выбранную пластину активной (золотая подсветка), снимая выделение с остальных.
+    /// Делает выбранную пластину активной (золотая подсветка), снимая выделение с остальных,
+    /// и переносит кнопки связи на её строку матрицы.
     /// </summary>
     private void OnPlateSelected(object? sender, EventArgs e)
     {
-        foreach (PlateRowControl plate in _plates)
+        for (int i = 0; i < _plates.Length; i++)
         {
-            plate.IsActive = ReferenceEquals(plate, sender);
+            bool selected = ReferenceEquals(_plates[i], sender);
+            _plates[i].IsActive = selected;
+            if (selected)
+            {
+                _selectedPlate = i;
+            }
+        }
+
+        RefreshRelationButtons();
+    }
+
+    /// <summary>
+    /// Обрабатывает нажатие кнопки связи (·/+/−) на пластине: записывает значение
+    /// в строку матрицы выбранной пластины и запускает пересчёт решения.
+    /// </summary>
+    private void OnRelationChanged(object? sender, int value)
+    {
+        if (sender is not PlateRowControl plate)
+        {
+            return;
+        }
+
+        int target = Array.IndexOf(_plates, plate);
+        if (target < 0 || target == _selectedPlate)
+        {
+            return; // диагональ не редактируется
+        }
+
+        _matrix[_selectedPlate, target] = value;
+        plate.RelationValue = value;
+        RefreshOutgoingRelations();
+        Solve();
+    }
+
+    /// <summary>
+    /// Обновляет индикаторы исходящих связей над каждой пластиной из матрицы:
+    /// для пластины i собираются все её ненулевые связи (i → j, кроме диагонали).
+    /// </summary>
+    private void RefreshOutgoingRelations()
+    {
+        int n = _plates.Length;
+        for (int i = 0; i < n; i++)
+        {
+            var list = new List<(int Target, int Sign)>();
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j || _matrix[i, j] == 0)
+                {
+                    continue;
+                }
+
+                list.Add((j + 1, _matrix[i, j]));
+            }
+
+            _plates[i].SetOutgoing(list.ToArray());
         }
     }
 
-    /// <summary>Создаёт стилизованную ячейку-заголовок матрицы.</summary>
-    private static Label MakeMatrixHeader(string text) => new()
+    /// <summary>
+    /// Обновляет кнопки связи на всех пластинах под строку матрицы выбранной
+    /// пластины: для самой выбранной — заблокированный «+», для остальных — значение связи.
+    /// </summary>
+    private void RefreshRelationButtons()
     {
-        Text = text,
-        AutoSize = false,
-        Width = 42,
-        Height = 24,
-        TextAlign = ContentAlignment.MiddleCenter,
-        ForeColor = GothGold,
-        Font = GothHeadingFont,
-        Margin = new Padding(1)
-    };
+        for (int j = 0; j < _plates.Length; j++)
+        {
+            if (j == _selectedPlate)
+            {
+                _plates[j].RelationLocked = true;
+                _plates[j].RelationValue = 1; // диагональ всегда +
+                continue;
+            }
+
+            _plates[j].RelationLocked = false;
+            _plates[j].RelationValue = _matrix[_selectedPlate, j];
+        }
+    }
 
     private static Label MakeLabel(string text) => new()
     {
@@ -631,26 +644,13 @@ public sealed class MainForm : Form
             return; // пластины ещё не пересозданы
         }
 
-        // Собираем матрицу связей из комбобоксов.
-        var matrix = new int[n, n];
-        for (int i = 0; i < n; i++)
+        // Матрица связей хранится в памяти (_matrix) и редактируется кнопками
+        // ·/+/− на пластинах. Проверяем согласованность размеров.
+        if (_matrix.GetLength(0) != n)
         {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    matrix[i, j] = 1; // диагональ всегда +1
-                    continue;
-                }
-
-                matrix[i, j] = _matrixCombos[i, j].SelectedItem switch
-                {
-                    "+" => 1,
-                    "−" => -1,
-                    _ => 0
-                };
-            }
+            return;
         }
+        int[,] matrix = (int[,])_matrix.Clone();
 
         // Собираем стартовые позиции из визуальных пластин.
         var start = new int[n];

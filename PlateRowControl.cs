@@ -7,6 +7,9 @@ namespace LockPicker;
 /// Рисует горизонтальную металлическую пластину с 7 слотами-отверстиями,
 /// золотым штырьком в выровненном слоте и стрелками ◀ ▶ для сдвига.
 ///
+/// Над номером пластины размещены 3 взаимоисключающие кнопки связи
+/// (·/+/−): они задают, как ВЫБРАННАЯ (золотая) пластина влияет на эту.
+///
 /// Позиция <see cref="Position"/> — это индекс 0..6. Цель — центр (3).
 /// Слот, выровненный с пазом, определяется формулой «6 − позиция» (как в оригинале).
 /// </summary>
@@ -22,10 +25,19 @@ public sealed class PlateRowControl : Control
     private const int PlateWidth = SlotsWidth + PlatePadding * 2;
     private const int TravelPerStep = SlotSpacing;
     private const int MaxTravel = 3 * TravelPerStep; // максимальный сдвиг от центра (±96px)
-    private const int LabelWidth = 40;
+    private const int LabelWidth = 64;
     private const int ArrowWidth = 28;
     private const int TrackHeight = 46;
     private const int PlateHeight = 40;
+
+    // ===== Кнопки связи (над номером пластины) =====
+    private const int ButtonSize = 18;
+    private const int ButtonGap = 4;
+    private const int ButtonsTotalWidth = ButtonSize * 3 + ButtonGap * 2; // 62px
+    private const int ButtonStripHeight = 24;
+
+    // Подписи кнопок: нет связи (пусто) / синхронно / инверсно.
+    private static readonly string[] RelationGlyphs = { " ", "+", "−" };
 
     // ===== Готическая палитра (синхронизирована с MainForm) =====
     private static readonly Color GothText = Color.FromArgb(200, 184, 150);
@@ -38,8 +50,19 @@ public sealed class PlateRowControl : Control
     private static readonly Color SteelDark = Color.FromArgb(40, 37, 44);
     private static readonly Color SlotHole = Color.FromArgb(13, 13, 15);
 
+    // Цвета индикаторов связей: синхронно (зелёный) / инверсно (красный).
+    private static readonly Color RelationPlus = Color.FromArgb(98, 178, 92);
+    private static readonly Color RelationMinus = Color.FromArgb(196, 64, 56);
+
     private int _position = BreachSolver.Center;
     private bool _isActive;
+
+    // Исходящие связи пластины: пары (номер целевой пластины, знак ±1).
+    private (int Target, int Sign)[] _outgoing = Array.Empty<(int, int)>();
+
+    // ===== Состояние связи с выбранной пластиной =====
+    private int _relation;          // -1 / 0 / +1
+    private bool _relationLocked;   // true для самой выбранной пластины (диагональ)
 
     // ===== Состояние перетаскивания (drag-and-drop) =====
     private bool _dragging;
@@ -53,16 +76,22 @@ public sealed class PlateRowControl : Control
     /// <summary>Возникает при щелчке по пластине (для выбора активной).</summary>
     public event EventHandler? PlateSelected;
 
+    /// <summary>
+    /// Возникает при нажатии кнопки связи (·/+/−). Аргумент — новое значение
+    /// связи (0 / +1 / −1) от выбранной пластины к этой.
+    /// </summary>
+    public event EventHandler<int>? RelationChanged;
+
     public PlateRowControl()
     {
         DoubleBuffered = true;
-        Height = TrackHeight + 8;
+        Height = ButtonStripHeight + TrackHeight + 8;
         Width = LabelWidth + ArrowWidth * 2 + PlateWidth + MaxTravel * 2 + 12;
         Margin = new Padding(0, 3, 0, 3);
         SetStyle(ControlStyles.ResizeRedraw, true);
     }
 
-    /// <summary>Порядковый номер пластины (1-based) для подписи римской цифрой.</summary>
+    /// <summary>Порядковый номер пластины (1-based) для подписи.</summary>
     [Browsable(false)]
     public int PlateNumber { get; set; } = 1;
 
@@ -102,13 +131,65 @@ public sealed class PlateRowControl : Control
         }
     }
 
+    /// <summary>
+    /// Значение связи от выбранной пластины к этой: 0 (нет), +1 (синхронно), −1 (инверсно).
+    /// Отражается на состоянии кнопок над номером.
+    /// </summary>
+    [Browsable(false)]
+    public int RelationValue
+    {
+        get => _relation;
+        set
+        {
+            int v = Math.Sign(value);
+            if (v == _relation)
+            {
+                return;
+            }
+
+            _relation = v;
+            Invalidate();
+        }
+    }
+
+    /// <summary>
+    /// Заблокированы ли кнопки связи. Истина для самой выбранной пластины
+    /// (диагональ матрицы всегда «+»): кнопки отображаются, но не редактируются.
+    /// </summary>
+    [Browsable(false)]
+    public bool RelationLocked
+    {
+        get => _relationLocked;
+        set
+        {
+            if (_relationLocked == value)
+            {
+                return;
+            }
+
+            _relationLocked = value;
+            Invalidate();
+        }
+    }
+
+    /// <summary>
+    /// Исходящие связи этой пластины (как она «тянет» другие): список пар
+    /// (номер целевой пластины 1-based, знак ±1). Рисуются над пластиной
+    /// справа от номера: «+N» зелёным, «−N» красным.
+    /// </summary>
+    public void SetOutgoing((int Target, int Sign)[] relations)
+    {
+        _outgoing = relations ?? Array.Empty<(int, int)>();
+        Invalidate();
+    }
+
     // ===== Прямоугольники зон (вычисляются от текущей ширины) =====
 
     private Rectangle TrackRect()
     {
         int trackWidth = PlateWidth + MaxTravel * 2;
         int x = LabelWidth + ArrowWidth;
-        int y = (Height - TrackHeight) / 2;
+        int y = ButtonStripHeight + ((Height - ButtonStripHeight) - TrackHeight) / 2;
         return new Rectangle(x, y, trackWidth, TrackHeight);
     }
 
@@ -124,6 +205,18 @@ public sealed class PlateRowControl : Control
         return new Rectangle(track.Right, track.Y, ArrowWidth, track.Height);
     }
 
+    /// <summary>Прямоугольник кнопки связи по индексу 0..2 (·/+/−).</summary>
+    private Rectangle ButtonRect(int index)
+    {
+        int startX = (LabelWidth - ButtonsTotalWidth) / 2;
+        int x = startX + index * (ButtonSize + ButtonGap);
+        int y = (ButtonStripHeight - ButtonSize) / 2;
+        return new Rectangle(x, y, ButtonSize, ButtonSize);
+    }
+
+    /// <summary>Индекс активной кнопки связи: 0 (нет), 1 (+), 2 (−).</summary>
+    private int ActiveButtonIndex => _relation == 0 ? 0 : (_relation > 0 ? 1 : 2);
+
     /// <summary>Текущий прямоугольник пластины с учётом позиции и drag-смещения.</summary>
     private Rectangle PlateRect()
     {
@@ -134,7 +227,7 @@ public sealed class PlateRowControl : Control
         return new Rectangle(plateX, plateY, PlateWidth, PlateHeight);
     }
 
-    // ===== Взаимодействие мышью (стрелки + перетаскивание) =====
+    // ===== Взаимодействие мышью (кнопки связи + стрелки + перетаскивание) =====
 
     protected override void OnMouseDown(MouseEventArgs e)
     {
@@ -145,10 +238,26 @@ public sealed class PlateRowControl : Control
             return;
         }
 
-        // Выбор активной пластины при любом нажатии.
+        // Клик по кнопкам связи над номером — задаём связь, не меняя выбор.
+        for (int k = 0; k < RelationGlyphs.Length; k++)
+        {
+            if (!ButtonRect(k).Contains(e.Location))
+            {
+                continue;
+            }
+
+            if (!_relationLocked)
+            {
+                int value = k == 0 ? 0 : (k == 1 ? 1 : -1);
+                RelationChanged?.Invoke(this, value);
+            }
+            return;
+        }
+
+        // Выбор активной пластины при любом нажатии вне кнопок связи.
         PlateSelected?.Invoke(this, EventArgs.Empty);
 
-        // Клик по стрелкам — пошаговый сдвиг (как раньше).
+        // Клик по стрелкам — пошаговый сдвиг.
         if (LeftArrowRect().Contains(e.Location))
         {
             Position--;
@@ -221,9 +330,77 @@ public sealed class PlateRowControl : Control
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
+        DrawRelationButtons(g);
+        DrawOutgoingRelations(g);
         DrawLabel(g);
         DrawArrows(g);
         DrawTrackAndPlate(g);
+    }
+
+    /// <summary>
+    /// Рисует исходящие связи пластины над треком: «+N» зелёным (синхронно),
+    /// «−N» красным (инверсно), где N — номер целевой пластины.
+    /// </summary>
+    private void DrawOutgoingRelations(Graphics g)
+    {
+        if (_outgoing.Length == 0)
+        {
+            return;
+        }
+
+        using var font = new Font("Consolas", 9F, FontStyle.Bold);
+        int x = LabelWidth + ArrowWidth + 4;
+        var stripRect = new Rectangle(0, 0, 0, ButtonStripHeight);
+
+        foreach ((int target, int sign) in _outgoing)
+        {
+            string text = (sign > 0 ? "+" : "−") + target;
+            Color color = sign > 0 ? RelationPlus : RelationMinus;
+
+            Size sz = TextRenderer.MeasureText(g, text, font);
+            var rect = new Rectangle(x, stripRect.Y, sz.Width + 4, ButtonStripHeight);
+            TextRenderer.DrawText(g, text, font, rect, color,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            x += sz.Width + 10;
+        }
+    }
+
+    private void DrawRelationButtons(Graphics g)
+    {
+        using var font = new Font("Segoe UI", 9F, FontStyle.Bold);
+        int active = ActiveButtonIndex;
+
+        for (int k = 0; k < RelationGlyphs.Length; k++)
+        {
+            Rectangle r = ButtonRect(k);
+            bool isActive = k == active;
+
+            Color back;
+            Color fore;
+            if (_relationLocked)
+            {
+                // Выбранная пластина: связь зафиксирована (+), кнопки приглушены.
+                back = isActive ? SteelMid : SteelDark;
+                fore = isActive ? GothGold : Color.FromArgb(80, 76, 70);
+            }
+            else
+            {
+                back = isActive ? GothGold : SteelDark;
+                fore = isActive ? Color.FromArgb(20, 18, 22) : GothTextDim;
+            }
+
+            using (var b = new SolidBrush(back))
+            {
+                g.FillRectangle(b, r);
+            }
+            using (var p = new Pen(Color.FromArgb(90, 0, 0, 0)))
+            {
+                g.DrawRectangle(p, r);
+            }
+
+            TextRenderer.DrawText(g, RelationGlyphs[k], font, r, fore,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
     }
 
     private void DrawLabel(Graphics g)
@@ -232,7 +409,7 @@ public sealed class PlateRowControl : Control
 
         using var font = new Font("Constantia", 11F, FontStyle.Bold);
         Color color = _isActive ? GothGoldBright : GothTextDim;
-        var rect = new Rectangle(0, 0, LabelWidth, Height);
+        var rect = new Rectangle(0, ButtonStripHeight, LabelWidth, Height - ButtonStripHeight);
         TextRenderer.DrawText(g, label, font, rect, color,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
