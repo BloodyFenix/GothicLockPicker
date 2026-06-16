@@ -96,6 +96,8 @@ public sealed class MainForm : Form
         ApplySettingsToUi();
         RestoreWindowGeometry();
         _solveAnimTimer.Tick += OnSolveAnimTick;
+        // При показе окна снимаем фокус с поля заголовка (иначе в нём мигает каретка).
+        Shown += (_, _) => ActiveControl = null;
     }
 
     // ===== Построение интерфейса =====
@@ -209,7 +211,14 @@ public sealed class MainForm : Form
         layout.Controls.Add(_countdownBox);
 
         // --- Последовательность ---
-        layout.Controls.Add(MakeLabel("Последовательность взлома:"));
+        // Заголовок поля одновременно служит статусом поиска решения
+        // («Идёт поиск…», «Найдено шагов…», «Замок уже открыт» и т. п.).
+        _solveStatusLabel.Text = "Последовательность взлома:";
+        _solveStatusLabel.ForeColor = GothTextDim;
+        _solveStatusLabel.Font = GothHeadingFont;
+        _solveStatusLabel.AutoSize = true;
+        _solveStatusLabel.Margin = new Padding(0, 8, 0, 2);
+        layout.Controls.Add(_solveStatusLabel);
         _sequenceBox.Multiline = true;
         _sequenceBox.ScrollBars = ScrollBars.Vertical;
         _sequenceBox.Width = 500;
@@ -352,15 +361,8 @@ public sealed class MainForm : Form
         _startPanel.Margin = new Padding(0, 2, 0, 8);
         panel.Controls.Add(_startPanel);
 
-        // --- Статус поиска решения ---
-        // Решение ищется автоматически при любом изменении и сразу
-        // отправляется в поле последовательности взлома (левая панель).
-        _solveStatusLabel.Text = "";
-        _solveStatusLabel.ForeColor = GothGold;
-        _solveStatusLabel.Font = GothHeadingFont;
-        _solveStatusLabel.AutoSize = true;
-        _solveStatusLabel.Margin = new Padding(0, 4, 0, 8);
-        panel.Controls.Add(_solveStatusLabel);
+        // Статус поиска решения отображается в заголовке поля
+        // «Последовательность взлома» (левая панель), отдельной метки нет.
 
         RebuildMatrix();
         return panel;
@@ -857,7 +859,7 @@ public sealed class MainForm : Form
         {
             StopSolveAnimation();
             CancelPendingSolve();
-            _solveStatusLabel.Text = "✔ Замок уже открыт (все по центру)";
+            _solveStatusLabel.Text = "Последовательность взлома: ✔ замок уже открыт";
             _solveStatusLabel.ForeColor = GothGold;
             _sequenceBox.Text = string.Empty;
             return;
@@ -898,7 +900,7 @@ public sealed class MainForm : Form
             }
 
             StopSolveAnimation();
-            _solveStatusLabel.Text = "✖ Ошибка поиска решения: " + ex.Message;
+            _solveStatusLabel.Text = "Последовательность взлома: ✖ ошибка — " + ex.Message;
             _solveStatusLabel.ForeColor = GothBlood;
             return;
         }
@@ -914,7 +916,7 @@ public sealed class MainForm : Form
 
         if (steps.Count == 0)
         {
-            _solveStatusLabel.Text = "✖ Решение не найдено (замок неразрешим)";
+            _solveStatusLabel.Text = "Последовательность взлома: ✖ решение не найдено";
             _solveStatusLabel.ForeColor = GothBlood;
             return;
         }
@@ -933,7 +935,8 @@ public sealed class MainForm : Form
         _sequenceBox.Text = string.Join(Environment.NewLine, lines);
         _startPlateBox.Value = 1; // решение всегда начинается с фокуса на первой пластине
 
-        _solveStatusLabel.Text = $"✔ Найдено шагов: {steps.Count} (ходов: {totalMoves})";
+        _solveStatusLabel.Text =
+            $"Последовательность взлома: ✔ шагов {steps.Count}, ходов {totalMoves}";
         _solveStatusLabel.ForeColor = GothGold;
     }
 
@@ -955,7 +958,7 @@ public sealed class MainForm : Form
     {
         _solveAnimFrame = 0;
         _solveStatusLabel.ForeColor = GothTextDim;
-        _solveStatusLabel.Text = "⏳ Идёт поиск решения";
+        _solveStatusLabel.Text = "Последовательность взлома: ⏳ идёт поиск решения";
         _solveAnimTimer.Start();
     }
 
@@ -969,7 +972,8 @@ public sealed class MainForm : Form
     private void OnSolveAnimTick(object? sender, EventArgs e)
     {
         _solveAnimFrame = (_solveAnimFrame + 1) % 4;
-        _solveStatusLabel.Text = "⏳ Идёт поиск решения" + new string('.', _solveAnimFrame);
+        _solveStatusLabel.Text =
+            "Последовательность взлома: ⏳ идёт поиск решения" + new string('.', _solveAnimFrame);
     }
 
     private void OnFindWindowClick(object? sender, EventArgs e)
