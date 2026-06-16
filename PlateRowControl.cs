@@ -87,7 +87,7 @@ public sealed class PlateRowControl : Control
         DoubleBuffered = true;
         Height = ButtonStripHeight + TrackHeight + 8;
         Width = LabelWidth + ArrowWidth * 2 + PlateWidth + MaxTravel * 2 + 12;
-        Margin = new Padding(0, 3, 0, 3);
+        Margin = new Padding(0, 0, 0, 0);
         SetStyle(ControlStyles.ResizeRedraw, true);
     }
 

@@ -61,7 +61,11 @@ public sealed class MainForm : Form
     private readonly ProgressBar _progressBar = new();
 
     // ===== Элементы конструктора замка (правая панель) =====
-    private readonly NumericUpDown _constPlateCountBox = new();
+    // Количество пластин выбирается рядом взаимоисключающих кнопок 4..7.
+    private const int MinPlateCount = 4;
+    private const int MaxPlateCount = 7;
+    private int _plateCount = 5;
+    private Button[] _plateCountButtons = Array.Empty<Button>();
     private readonly FlowLayoutPanel _startPanel = new();
     private readonly Label _solveStatusLabel = new();
 
@@ -287,15 +291,40 @@ public sealed class MainForm : Form
         panel.Controls.Add(title);
         panel.Controls.Add(subtitle);
 
-        // --- Число пластин ---
+        // --- Число пластин (ряд взаимоисключающих кнопок 4..7) ---
         panel.Controls.Add(MakeLabel("Количество пластин:"));
-        _constPlateCountBox.Minimum = 2;
-        _constPlateCountBox.Maximum = 10;
-        _constPlateCountBox.Value = 5;
-        _constPlateCountBox.Width = 120;
-        StyleNumeric(_constPlateCountBox);
-        _constPlateCountBox.ValueChanged += (_, _) => RebuildMatrix();
-        panel.Controls.Add(_constPlateCountBox);
+        var countRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            Margin = new Padding(0, 2, 0, 8),
+            BackColor = GothBackground
+        };
+
+        _plateCountButtons = new Button[MaxPlateCount - MinPlateCount + 1];
+        for (int count = MinPlateCount; count <= MaxPlateCount; count++)
+        {
+            int value = count; // фиксируем для замыкания
+            var button = new Button
+            {
+                Text = value.ToString(),
+                AutoSize = false,
+                Width = 44,
+                Height = 32,
+                Margin = new Padding(0, 0, 6, 0)
+            };
+            StyleButton(button, GothPanelLight, GothGold);
+            // Шрифт Constantia даёт неровные метрики цифр — берём обычный
+            // моноширинный для одинакового центрирования всех чисел.
+            button.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+            button.Padding = new Padding(0);
+            button.TextAlign = ContentAlignment.MiddleCenter;
+            button.Click += (_, _) => SetPlateCount(value);
+            _plateCountButtons[value - MinPlateCount] = button;
+            countRow.Controls.Add(button);
+        }
+        panel.Controls.Add(countRow);
+        UpdatePlateCountButtons();
 
         // --- Стартовые позиции (визуальные пластины, как в веб-версии) ---
         // Разметка связей теперь прямо на пластинах: над номером — кнопки ·/+/−,
@@ -327,12 +356,44 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
+    /// Устанавливает количество пластин и перестраивает конструктор.
+    /// Вызывается из ряда кнопок выбора количества.
+    /// </summary>
+    private void SetPlateCount(int count)
+    {
+        int clamped = Math.Clamp(count, MinPlateCount, MaxPlateCount);
+        if (clamped == _plateCount && _plates.Length == clamped)
+        {
+            return;
+        }
+
+        _plateCount = clamped;
+        UpdatePlateCountButtons();
+        RebuildMatrix();
+    }
+
+    /// <summary>
+    /// Подсвечивает кнопку текущего количества пластин (золотой фон),
+    /// остальные оставляет в обычном стиле.
+    /// </summary>
+    private void UpdatePlateCountButtons()
+    {
+        for (int i = 0; i < _plateCountButtons.Length; i++)
+        {
+            bool selected = (MinPlateCount + i) == _plateCount;
+            Button b = _plateCountButtons[i];
+            b.BackColor = selected ? GothGold : GothPanelLight;
+            b.ForeColor = selected ? GothBackground : GothGold;
+        }
+    }
+
+    /// <summary>
     /// Пересоздаёт сетку матрицы связей и поля стартовых позиций
     /// под текущее количество пластин.
     /// </summary>
     private void RebuildMatrix()
     {
-        int n = (int)_constPlateCountBox.Value;
+        int n = _plateCount;
 
         // Подавляем пересчёт, пока матрица и пластины пересоздаются.
         _rebuilding = true;
@@ -638,7 +699,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        int n = (int)_constPlateCountBox.Value;
+        int n = _plateCount;
         if (_plates.Length != n)
         {
             return; // пластины ещё не пересозданы
@@ -659,8 +720,20 @@ public sealed class MainForm : Form
             start[i] = _plates[i].Position;
         }
 
-        var solver = new BreachSolver(n, matrix);
-        List<LockStep> steps = solver.GetSolutionSteps(start);
+        // Любое исключение при поиске решения не должно ронять приложение:
+        // показываем его в статусе вместо вылета.
+        List<LockStep> steps;
+        try
+        {
+            var solver = new BreachSolver(n, matrix);
+            steps = solver.GetSolutionSteps(start);
+        }
+        catch (Exception ex)
+        {
+            _solveStatusLabel.Text = "✖ Ошибка поиска решения: " + ex.Message;
+            _solveStatusLabel.ForeColor = GothBlood;
+            return;
+        }
 
         if (steps.Count == 0)
         {

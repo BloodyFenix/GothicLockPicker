@@ -20,6 +20,9 @@ public sealed class BreachSolver
     /// <summary>Максимальная позиция паза.</summary>
     public const int MaxPos = 6;
 
+    // Возможные элементарные ходы пластины: влево и вправо.
+    private static readonly int[] Deltas = { -1, 1 };
+
     private readonly int _numPlates;
     private readonly int[,] _matrix;
 
@@ -70,7 +73,7 @@ public sealed class BreachSolver
 
             for (int i = 0; i < _numPlates; i++)
             {
-                foreach (int delta in stackalloc[] { -1, 1 })
+                foreach (int delta in Deltas)
                 {
                     if (!TryApplyMove(state, i, delta, out int[] next))
                     {
