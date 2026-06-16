@@ -82,12 +82,20 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _cts;
     private bool _isRunning;
 
+    // Отмена предыдущего (возможно ещё идущего) асинхронного поиска решения.
+    private CancellationTokenSource? _solveCts;
+
+    // Таймер анимации статуса «Идёт поиск решения…» во время фонового расчёта.
+    private readonly System.Windows.Forms.Timer _solveAnimTimer = new() { Interval = 250 };
+    private int _solveAnimFrame;
+
     public MainForm()
     {
         _settings = AppSettings.Load();
         BuildUi();
         ApplySettingsToUi();
         RestoreWindowGeometry();
+        _solveAnimTimer.Tick += OnSolveAnimTick;
     }
 
     // ===== Построение интерфейса =====
@@ -691,7 +699,7 @@ public sealed class MainForm : Form
     /// BFS-решатель и сразу отправляет найденную последовательность шагов
     /// в поле последовательности взлома. Вызывается при любом изменении конструктора.
     /// </summary>
-    private void Solve()
+    private async void Solve()
     {
         // Во время перестроения UI поля ещё не согласованы — пропускаем.
         if (_rebuilding || _isRunning)
@@ -720,37 +728,70 @@ public sealed class MainForm : Form
             start[i] = _plates[i].Position;
         }
 
-        // Любое исключение при поиске решения не должно ронять приложение:
-        // показываем его в статусе вместо вылета.
+        // Замок уже открыт — решать нечего, показываем сразу (без фонового расчёта).
+        if (Array.TrueForAll(start, p => p == BreachSolver.Center))
+        {
+            StopSolveAnimation();
+            CancelPendingSolve();
+            _solveStatusLabel.Text = "✔ Замок уже открыт (все по центру)";
+            _solveStatusLabel.ForeColor = GothGold;
+            _sequenceBox.Text = string.Empty;
+            return;
+        }
+
+        // Отменяем предыдущий ещё идущий расчёт и запускаем новый.
+        CancelPendingSolve();
+        var cts = new CancellationTokenSource();
+        _solveCts = cts;
+        CancellationToken token = cts.Token;
+
+        // Запускаем анимацию статуса «Идёт поиск решения…».
+        StartSolveAnimation();
+
+        // Взвешенный решатель учитывает перемещение фокуса между пластинами,
+        // поэтому расчёт может быть долгим — выполняем его в фоне, не блокируя UI.
+        // Фокус на старте — первая пластина (как выставляется в UI: _startPlateBox.Value = 1).
         List<LockStep> steps;
         try
         {
-            var solver = new BreachSolver(n, matrix);
-            steps = solver.GetSolutionSteps(start);
+            steps = await Task.Run(() =>
+            {
+                var solver = new BreachSolver(n, matrix);
+                return solver.GetSolutionStepsWeighted(start, 0, token);
+            }, token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Пришёл новый расчёт — этот результат больше не актуален, молча выходим.
+            return;
         }
         catch (Exception ex)
         {
+            // Если этот расчёт уже устарел — игнорируем его ошибку.
+            if (!ReferenceEquals(_solveCts, cts))
+            {
+                return;
+            }
+
+            StopSolveAnimation();
             _solveStatusLabel.Text = "✖ Ошибка поиска решения: " + ex.Message;
             _solveStatusLabel.ForeColor = GothBlood;
             return;
         }
 
+        // Пока считали, мог стартовать более новый расчёт — тогда наш результат устарел.
+        if (!ReferenceEquals(_solveCts, cts))
+        {
+            return;
+        }
+
+        _solveCts = null;
+        StopSolveAnimation();
+
         if (steps.Count == 0)
         {
-            // Различаем «уже открыт» и «неразрешим».
-            bool alreadySolved = Array.TrueForAll(start, p => p == BreachSolver.Center);
-            if (alreadySolved)
-            {
-                _solveStatusLabel.Text = "✔ Замок уже открыт (все по центру)";
-                _solveStatusLabel.ForeColor = GothGold;
-                _sequenceBox.Text = string.Empty;
-            }
-            else
-            {
-                _solveStatusLabel.Text = "✖ Решение не найдено (замок неразрешим)";
-                _solveStatusLabel.ForeColor = GothBlood;
-            }
-
+            _solveStatusLabel.Text = "✖ Решение не найдено (замок неразрешим)";
+            _solveStatusLabel.ForeColor = GothBlood;
             return;
         }
 
@@ -770,6 +811,41 @@ public sealed class MainForm : Form
 
         _solveStatusLabel.Text = $"✔ Найдено шагов: {steps.Count} (ходов: {totalMoves})";
         _solveStatusLabel.ForeColor = GothGold;
+    }
+
+    /// <summary>Отменяет предыдущий незавершённый фоновый расчёт решения, если он есть.</summary>
+    private void CancelPendingSolve()
+    {
+        if (_solveCts is null)
+        {
+            return;
+        }
+
+        _solveCts.Cancel();
+        _solveCts.Dispose();
+        _solveCts = null;
+    }
+
+    /// <summary>Запускает анимацию статуса на время фонового поиска решения.</summary>
+    private void StartSolveAnimation()
+    {
+        _solveAnimFrame = 0;
+        _solveStatusLabel.ForeColor = GothTextDim;
+        _solveStatusLabel.Text = "⏳ Идёт поиск решения";
+        _solveAnimTimer.Start();
+    }
+
+    /// <summary>Останавливает анимацию статуса поиска решения.</summary>
+    private void StopSolveAnimation()
+    {
+        _solveAnimTimer.Stop();
+    }
+
+    /// <summary>Кадр анимации: дописывает к статусу бегущие точки «.», «..», «...».</summary>
+    private void OnSolveAnimTick(object? sender, EventArgs e)
+    {
+        _solveAnimFrame = (_solveAnimFrame + 1) % 4;
+        _solveStatusLabel.Text = "⏳ Идёт поиск решения" + new string('.', _solveAnimFrame);
     }
 
     private void OnFindWindowClick(object? sender, EventArgs e)
@@ -919,6 +995,8 @@ public sealed class MainForm : Form
     private void OnFormClosing(object? sender, FormClosingEventArgs e)
     {
         _cts?.Cancel();
+        _solveCts?.Cancel();
+        _solveAnimTimer.Stop();
         CollectSettingsFromUi();
         SaveWindowGeometry();
         _settings.Save();
