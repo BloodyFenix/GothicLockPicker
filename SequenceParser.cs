@@ -127,23 +127,33 @@ public static class SequenceParser
 
     private static TurnDirection? ParseDirection(string line)
     {
-        // Распознаём как по словам, так и по символам-стрелкам.
-        bool hasLeft = line.Contains("Влево", StringComparison.OrdinalIgnoreCase)
-                       || line.Contains('◀')
-                       || line.Contains('◄')
-                       || line.Contains('←');
+        // Сначала — однозначные ключевые слова. У них приоритет над символами-стрелками,
+        // потому что стрелки → и ➔ часто используются как разделитель в строке
+        // «Пластина N → направление», и иначе возникает ложный конфликт направлений.
+        bool wordLeft = line.Contains("Влево", StringComparison.OrdinalIgnoreCase);
+        bool wordRight = line.Contains("Вправо", StringComparison.OrdinalIgnoreCase);
 
-        bool hasRight = line.Contains("Вправо", StringComparison.OrdinalIgnoreCase)
-                        || line.Contains('▶')
-                        || line.Contains('►')
-                        || line.Contains('→');
-
-        if (hasLeft && !hasRight)
+        if (wordLeft && !wordRight)
         {
             return TurnDirection.Left;
         }
 
-        if (hasRight && !hasLeft)
+        if (wordRight && !wordLeft)
+        {
+            return TurnDirection.Right;
+        }
+
+        // Затем — направленные символы. Разделители → и ➔ намеренно НЕ считаем
+        // направлением (это служебные стрелки между номером пластины и направлением).
+        bool symLeft = line.Contains('◀') || line.Contains('◄') || line.Contains('←');
+        bool symRight = line.Contains('▶') || line.Contains('►');
+
+        if (symLeft && !symRight)
+        {
+            return TurnDirection.Left;
+        }
+
+        if (symRight && !symLeft)
         {
             return TurnDirection.Right;
         }
