@@ -79,6 +79,7 @@ public sealed class MainForm : Form
         Font = GothBodyFont;
         BackColor = GothBackground;
         ForeColor = GothText;
+        LoadWindowIcon();
 
         var root = new TableLayoutPanel
         {
@@ -238,6 +239,22 @@ public sealed class MainForm : Form
         Font = GothHeadingFont,
         ForeColor = GothTextDim
     };
+
+    /// <summary>
+    /// Загружает иконку окна из встроенного ресурса. Имя ресурса формируется
+    /// как "{RootNamespace}.{имя файла}", то есть "LockPicker.icon.ico".
+    /// </summary>
+    private void LoadWindowIcon()
+    {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        using Stream? stream = assembly.GetManifestResourceStream("LockPicker.icon.ico");
+        if (stream is null)
+        {
+            return;
+        }
+
+        Icon = new Icon(stream);
+    }
 
     /// <summary>Применяет тёмное готическое оформление к текстовому полю.</summary>
     private static void StyleTextBox(TextBox box)

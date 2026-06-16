@@ -11,6 +11,13 @@
     <RootNamespace>LockPicker</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- Иконка исполняемого файла (.exe) -->
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Встраиваем иконку как ресурс, чтобы задавать её окну во время выполнения -->
+    <EmbeddedResource Include="icon.ico" />
+  </ItemGroup>
 
 </Project>
