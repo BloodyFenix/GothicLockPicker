@@ -105,7 +105,7 @@ public sealed class MainForm : Form
     private void BuildUi()
     {
         Text = "Gothic LockPicker — взлом замков";
-        MinimumSize = new Size(1040, 700);
+        MinimumSize = new Size(932, 700);
         StartPosition = FormStartPosition.CenterScreen;
         Font = GothBodyFont;
         // Перехватываем клавиатуру на уровне формы для горячих клавиш конструктора.
@@ -125,7 +125,7 @@ public sealed class MainForm : Form
             BackColor = GothBackground
         };
         // Левая колонка — управление автоматом, правая — конструктор замка.
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 540));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 432));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         var layout = new FlowLayoutPanel
@@ -159,7 +159,7 @@ public sealed class MainForm : Form
 
         // --- Заголовок окна игры ---
         layout.Controls.Add(MakeLabel("Заголовок окна игры (поиск по части названия):"));
-        _windowTitleBox.Width = 500;
+        _windowTitleBox.Width = 400;
         StyleTextBox(_windowTitleBox);
         layout.Controls.Add(_windowTitleBox);
 
@@ -183,32 +183,37 @@ public sealed class MainForm : Form
         findRow.Controls.Add(_windowStatusLabel);
         layout.Controls.Add(findRow);
 
-        // --- Задержка ---
-        layout.Controls.Add(MakeLabel("Задержка между нажатиями (мс):"));
+        // --- Числовые настройки в один ряд: задержка, стартовая пластина, отсчёт ---
         _delayBox.Minimum = 0;
         _delayBox.Maximum = 60000;
         _delayBox.Increment = 50;
-        _delayBox.Width = 120;
+        _delayBox.Width = 80;
         StyleNumeric(_delayBox);
-        layout.Controls.Add(_delayBox);
 
-        // --- Стартовая пластина ---
-        layout.Controls.Add(MakeLabel("Текущая (стартовая) пластина — где сейчас фокус:"));
         _startPlateBox.Minimum = 1;
         _startPlateBox.Maximum = 20;
         _startPlateBox.Value = 1;
-        _startPlateBox.Width = 120;
+        _startPlateBox.Width = 80;
         StyleNumeric(_startPlateBox);
-        layout.Controls.Add(_startPlateBox);
 
-        // --- Обратный отсчёт ---
-        layout.Controls.Add(MakeLabel("Обратный отсчёт перед стартом (сек):"));
         _countdownBox.Minimum = 0;
         _countdownBox.Maximum = 30;
         _countdownBox.Value = 3;
-        _countdownBox.Width = 120;
+        _countdownBox.Width = 80;
         StyleNumeric(_countdownBox);
-        layout.Controls.Add(_countdownBox);
+
+        var numericRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            WrapContents = false,
+            Margin = new Padding(0, 4, 0, 4),
+            BackColor = GothBackground
+        };
+        numericRow.Controls.Add(MakeNumericColumn("Задержка (мс):", _delayBox));
+        numericRow.Controls.Add(MakeNumericColumn("Стартовая пластина:", _startPlateBox));
+        numericRow.Controls.Add(MakeNumericColumn("Отсчёт (сек):", _countdownBox));
+        layout.Controls.Add(numericRow);
 
         // --- Последовательность ---
         // Заголовок поля одновременно служит статусом поиска решения
@@ -221,7 +226,7 @@ public sealed class MainForm : Form
         layout.Controls.Add(_solveStatusLabel);
         _sequenceBox.Multiline = true;
         _sequenceBox.ScrollBars = ScrollBars.Vertical;
-        _sequenceBox.Width = 500;
+        _sequenceBox.Width = 400;
         _sequenceBox.Height = 160;
         StyleTextBox(_sequenceBox);
         _sequenceBox.Font = GothMonoFont;
@@ -252,7 +257,7 @@ public sealed class MainForm : Form
         layout.Controls.Add(actionRow);
 
         // --- Прогресс ---
-        _progressBar.Width = 500;
+        _progressBar.Width = 400;
         _progressBar.Height = 18;
         _progressBar.ForeColor = GothBlood;
         _progressBar.BackColor = GothPanel;
@@ -260,7 +265,7 @@ public sealed class MainForm : Form
 
         // --- Лог ---
         layout.Controls.Add(MakeLabel("Журнал:"));
-        _logBox.Width = 500;
+        _logBox.Width = 400;
         _logBox.Height = 140;
         _logBox.Font = GothMonoFont;
         _logBox.BackColor = GothPanel;
@@ -450,9 +455,14 @@ public sealed class MainForm : Form
 
         // Добавляем в панель в обратном порядке: пластина 1 снизу,
         // максимальная — сверху (панель имеет FlowDirection.TopDown).
+        // Между соседними пластинами вставляем тонкий разделитель.
         for (int i = n - 1; i >= 0; i--)
         {
             _startPanel.Controls.Add(_plates[i]);
+            if (i > 0)
+            {
+                _startPanel.Controls.Add(MakePlateSeparator());
+            }
         }
 
         _startPanel.ResumeLayout();
@@ -681,6 +691,37 @@ public sealed class MainForm : Form
         Margin = new Padding(0, 8, 0, 2),
         Font = GothHeadingFont,
         ForeColor = GothTextDim
+    };
+
+    /// <summary>
+    /// Создаёт вертикальную колонку «подпись над числовым полем» для размещения
+    /// нескольких числовых настроек в одном горизонтальном ряду.
+    /// </summary>
+    private static Control MakeNumericColumn(string caption, NumericUpDown box)
+    {
+        var column = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            AutoSize = true,
+            WrapContents = false,
+            Margin = new Padding(0, 0, 16, 0),
+            BackColor = GothBackground
+        };
+        column.Controls.Add(MakeLabel(caption));
+        column.Controls.Add(box);
+        return column;
+    }
+
+    /// <summary>
+    /// Создаёт тонкий горизонтальный разделитель между визуальными пластинами.
+    /// Ширину берём от самой пластины, так как панель имеет AutoSize.
+    /// </summary>
+    private Control MakePlateSeparator() => new Panel
+    {
+        Height = 1,
+        Width = _plates.Length > 0 ? _plates[0].Width : 200,
+        BackColor = GothGold,
+        Margin = new Padding(0, 4, 0, 4)
     };
 
     /// <summary>

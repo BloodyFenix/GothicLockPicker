@@ -17,24 +17,24 @@ public sealed class PlateRowControl : Control
 {
     // ===== Геометрия (подобрана под ширину панели конструктора) =====
     private const int SlotCount = 7;
-    private const int SlotDiameter = 18;
-    private const int SlotGap = 14;
-    private const int SlotSpacing = SlotDiameter + SlotGap; // шаг между слотами = 32px
-    private const int SlotsWidth = SlotCount * SlotDiameter + (SlotCount - 1) * SlotGap; // 210px
-    private const int PlatePadding = 16; // отступ слотов внутри пластины
+    private const int SlotDiameter = 15;
+    private const int SlotGap = 12;
+    private const int SlotSpacing = SlotDiameter + SlotGap; // шаг между слотами
+    private const int SlotsWidth = SlotCount * SlotDiameter + (SlotCount - 1) * SlotGap;
+    private const int PlatePadding = 13; // отступ слотов внутри пластины
     private const int PlateWidth = SlotsWidth + PlatePadding * 2;
     private const int TravelPerStep = SlotSpacing;
-    private const int MaxTravel = 3 * TravelPerStep; // максимальный сдвиг от центра (±96px)
-    private const int LabelWidth = 64;
-    private const int ArrowWidth = 28;
-    private const int TrackHeight = 46;
-    private const int PlateHeight = 40;
+    private const int MaxTravel = 3 * TravelPerStep; // максимальный сдвиг от центра
+    private const int LabelWidth = 55;
+    private const int ArrowWidth = 24;
+    private const int TrackHeight = 39;
+    private const int PlateHeight = 34;
 
     // ===== Кнопки связи (над номером пластины) =====
-    private const int ButtonSize = 18;
+    private const int ButtonSize = 15;
     private const int ButtonGap = 4;
-    private const int ButtonsTotalWidth = ButtonSize * 3 + ButtonGap * 2; // 62px
-    private const int ButtonStripHeight = 24;
+    private const int ButtonsTotalWidth = ButtonSize * 3 + ButtonGap * 2;
+    private const int ButtonStripHeight = 21;
 
     // Подписи кнопок: нет связи (пусто) / синхронно / инверсно.
     private static readonly string[] RelationGlyphs = { " ", "+", "−" };
